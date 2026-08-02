@@ -1,65 +1,89 @@
-# Work Time Tracker
+# 作業時間記録
 
-Small local work-time tracker for Windows.
+Windows向けの小型ローカル作業時間記録アプリです。
 
-Data is stored locally in `data/work-time-tracker.sqlite`. No sign-in, cloud sync, or internet connection is required.
+プロジェクトごとに作業時間を計測し、合計時間と直近の履歴を確認できます。ユーザー登録、クラウド同期、インターネット接続は不要です。データはPC内のSQLiteファイルに保存されます。
 
-Current version: `1.0.0`
+現在のバージョン: `1.0.0`
 
-## Start
+## 必要環境
 
-From PowerShell:
+- Windows
+- Node.js 24 以上
+- Microsoft Edge または Google Chrome 推奨
 
-```powershell
-.\Start-WorkTimeTracker.ps1
-```
+## 起動方法
 
-Or double-click this file. This is the recommended Windows launcher because it does not open a command prompt window.
+通常は、次のファイルをダブルクリックしてください。
 
 ```text
 Start-WorkTimeTracker.vbs
 ```
 
-`Start-WorkTimeTracker.cmd` is kept as a fallback and delegates to the `.vbs` launcher.
+この起動方法では、コマンドプロンプトの黒い画面を表示せずに起動できます。
 
-If script execution is blocked, run:
+PowerShellから起動する場合は、アプリのフォルダで次を実行します。
+
+```powershell
+.\Start-WorkTimeTracker.ps1
+```
+
+スクリプト実行がブロックされる場合は、次のコマンドで起動できます。
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Start-WorkTimeTracker.ps1
 ```
 
-The UI itself is Japanese. The PowerShell launcher text is intentionally ASCII-only so Windows PowerShell 5.1 can run it without UTF-8 parsing issues.
+`Start-WorkTimeTracker.cmd` は予備の起動ファイルです。内部的には `.vbs` 起動ファイルを呼び出します。
 
-## Distribution
+## 主な機能
 
-This app is distributed as a source ZIP. Users need Node.js 24 or later installed.
+- プロジェクトの作成と選択
+- タイマーのスタート、一時停止、再開、ストップ
+- 一時停止時間を除外した作業時間の記録
+- プロジェクトごとの累計時間表示
+- 作業時間の手動追加
+- 直近10件までの作業履歴表示
+- 作業履歴の編集と削除
+- プロジェクト名の変更
+- プロジェクト削除
+- アプリ再起動後のタイマー復元
+- SQLiteによるローカル保存
+- Windowsタスクトレイからの操作
+- 小型メインウィンドウと別ウィンドウの記録一覧
 
-To create a release archive:
+## データ保存場所
+
+作業データは次のファイルに保存されます。
+
+```text
+data/work-time-tracker.sqlite
+```
+
+`data/` フォルダ内のDB、ログ、ブラウザプロファイルはGitHubや配布ZIPには含めません。
+
+## 配布ZIPの作成
+
+リリース用ZIPを作る場合は、アプリのフォルダで次を実行します。
 
 ```powershell
 .\scripts\package-release.ps1
 ```
 
-The archive is written to:
+ZIPは次の場所に作成されます。
 
 ```text
 dist/work-time-tracker-v1.0.0.zip
 ```
 
-Runtime files under `data/` are intentionally excluded from GitHub and release archives.
+## GitHubで配布する場合
 
-## Implemented
+GitHub Releasesで `v1.0.0` のリリースを作成し、`dist/work-time-tracker-v1.0.0.zip` を添付すると、利用者がダウンロードしやすくなります。
 
-- Create or select projects
-- Start, pause, resume, and stop one active timer
-- Exclude paused time from active work time
-- Store projects, entries, and active timer state in SQLite
-- Restore a running or paused timer after app restart
-- Show project totals calculated from saved entries
-- Show, edit, and delete work history
-- Rename and delete projects
-- Windows task tray menu: open, pause, resume, stop, exit
+## 補足
 
-## Notes
+このバージョンは、Tauri/Rustのビルド環境がなくても動作確認しやすいように、Node.js 24 標準の `node:sqlite` とローカルWeb UIで構成しています。
 
-This MVP uses Node.js 24 `node:sqlite` and a local browser UI because the current workspace does not include a Tauri/Rust build toolchain. The API and SQLite schema are shaped so they can be migrated into a Tauri shell later.
+将来的にTauriへ移行する場合も、現在のSQLiteスキーマとAPI設計を流用できます。
+
+PowerShellランチャー内の表示文字列は、Windows PowerShell 5.1の文字コード問題を避けるため、一部英語表記にしています。アプリ画面本体は日本語です。
