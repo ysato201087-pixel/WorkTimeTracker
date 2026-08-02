@@ -22,6 +22,7 @@ const $ = (id) => document.getElementById(id);
 const els = {
   statusText: $("statusText"),
   projectInput: $("projectInput"),
+  projectSelect: $("projectSelect"),
   projectOptions: $("projectOptions"),
   message: $("message"),
   currentTime: $("currentTime"),
@@ -110,6 +111,11 @@ function selectedProject() {
   return state.projects.find((project) => project.name.toLowerCase() === name.toLowerCase()) || null;
 }
 
+function syncProjectSelectToInput() {
+  const project = selectedProject();
+  els.projectSelect.value = project?.id || "";
+}
+
 function currentProjectTotal() {
   const timer = state.activeTimer;
   const project = timer.status !== "IDLE"
@@ -135,7 +141,13 @@ function renderTimer() {
 
   const locked = status !== "IDLE";
   els.projectInput.disabled = locked;
-  if (locked && state.activeTimer.projectName) els.projectInput.value = state.activeTimer.projectName;
+  els.projectSelect.disabled = locked;
+  if (locked && state.activeTimer.projectName) {
+    els.projectInput.value = state.activeTimer.projectName;
+    els.projectSelect.value = state.activeTimer.projectId || "";
+  } else {
+    syncProjectSelectToInput();
+  }
 
   els.startButton.disabled = status !== "IDLE";
   els.pauseButton.disabled = status !== "RUNNING";
@@ -149,6 +161,12 @@ function renderProjectOptions() {
     option.value = project.name;
     return option;
   }));
+
+  els.projectSelect.replaceChildren(
+    optionElement("", "新規プロジェクト名を入力"),
+    ...state.projects.map((project) => optionElement(project.id, project.name))
+  );
+  syncProjectSelectToInput();
 
   const previousFilter = els.historyProjectFilter.value || "all";
   els.historyProjectFilter.replaceChildren(
@@ -359,7 +377,16 @@ els.stopButton.addEventListener("click", async () => {
   }
 });
 
-els.projectInput.addEventListener("input", renderTimer);
+els.projectInput.addEventListener("input", () => {
+  syncProjectSelectToInput();
+  renderTimer();
+});
+
+els.projectSelect.addEventListener("change", () => {
+  const project = state.projects.find((item) => item.id === els.projectSelect.value);
+  els.projectInput.value = project?.name || "";
+  renderTimer();
+});
 
 els.openHistoryButton.addEventListener("click", openHistoryWindow);
 
