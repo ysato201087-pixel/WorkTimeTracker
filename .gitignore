@@ -1,0 +1,16 @@
+node_modules/
+npm-debug.log*
+
+# Local runtime data
+data/*
+!data/.gitkeep
+
+# Distribution archives
+dist/
+*.zip
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

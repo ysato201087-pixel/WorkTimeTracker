@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>作業時間記録</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="timer-panel" aria-label="タイマー">
+        <div class="topline">
+          <div>
+            <h1>作業時間記録</h1>
+            <p id="statusText" class="status idle">未計測</p>
+          </div>
+          <button id="openHistoryButton" class="icon-button" title="記録一覧を開く" aria-label="記録一覧を開く">≡</button>
+        </div>
+
+        <label class="field-label" for="projectInput">プロジェクト名</label>
+        <input id="projectInput" class="project-input" list="projectOptions" autocomplete="off" placeholder="例: 商品広告A">
+        <datalist id="projectOptions"></datalist>
+        <p id="message" class="message" role="status"></p>
+
+        <div class="metric">
+          <span>今回の作業時間</span>
+          <strong id="currentTime">00:00:00</strong>
+        </div>
+
+        <div class="total-row">
+          <span>プロジェクト累計</span>
+          <strong id="projectTotal">00:00:00</strong>
+        </div>
+
+        <div class="button-grid">
+          <button id="startButton" class="primary">スタート</button>
+          <button id="pauseButton">一時停止</button>
+          <button id="resumeButton">再開</button>
+          <button id="stopButton" class="danger">ストップ</button>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="historyDialog" class="history-dialog">
+      <div class="dialog-head">
+        <h2>記録一覧</h2>
+        <button id="closeHistoryButton" class="icon-button" title="閉じる" aria-label="閉じる">×</button>
+      </div>
+
+      <div class="history-tools">
+        <select id="historyProjectFilter"></select>
+        <button id="addEntryButton">手動追加</button>
+        <button id="renameProjectButton">名称変更</button>
+        <button id="deleteProjectButton" class="danger">削除</button>
+      </div>
+
+      <div id="historySummary" class="history-summary"></div>
+      <div id="historyList" class="history-list"></div>
+    </dialog>
+
+    <dialog id="editDialog" class="edit-dialog">
+      <form id="editForm" method="dialog">
+        <div class="dialog-head">
+          <h2 id="editDialogTitle">履歴編集</h2>
+          <button id="cancelEditButton" class="icon-button" value="cancel" aria-label="閉じる">×</button>
+        </div>
+
+        <input id="editEntryId" type="hidden">
+        <label>
+          プロジェクト
+          <select id="editProjectId"></select>
+        </label>
+        <label id="durationPresetLabel">
+          作業時間を選択
+          <select id="durationPreset">
+            <option value="900">15分</option>
+            <option value="1800">30分</option>
+            <option value="2700">45分</option>
+            <option value="3600" selected>1時間</option>
+            <option value="5400">1時間30分</option>
+            <option value="7200">2時間</option>
+            <option value="10800">3時間</option>
+            <option value="14400">4時間</option>
+            <option value="21600">6時間</option>
+            <option value="28800">8時間</option>
+            <option value="custom">直接入力</option>
+          </select>
+        </label>
+        <label>
+          作業時間
+          <input id="editActiveText" type="text" inputmode="numeric" placeholder="例: 1時間20分30秒 または 01:20:30" required>
+        </label>
+
+        <p id="editMessage" class="message" role="status"></p>
+        <div class="edit-actions">
+          <button id="deleteEntryButton" type="button" class="danger">履歴削除</button>
+          <button id="saveEntryButton" type="submit" class="primary">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

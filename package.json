@@ -1,0 +1,13 @@
+{
+  "name": "work-time-tracker",
+  "version": "1.0.0",
+  "private": false,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
