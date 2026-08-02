@@ -22,8 +22,7 @@ const $ = (id) => document.getElementById(id);
 const els = {
   statusText: $("statusText"),
   projectInput: $("projectInput"),
-  projectSelect: $("projectSelect"),
-  projectOptions: $("projectOptions"),
+  projectMenu: $("projectMenu"),
   message: $("message"),
   currentTime: $("currentTime"),
   projectTotal: $("projectTotal"),
@@ -111,9 +110,42 @@ function selectedProject() {
   return state.projects.find((project) => project.name.toLowerCase() === name.toLowerCase()) || null;
 }
 
-function syncProjectSelectToInput() {
-  const project = selectedProject();
-  els.projectSelect.value = project?.id || "";
+function hideProjectMenu() {
+  els.projectMenu.hidden = true;
+  els.projectInput.setAttribute("aria-expanded", "false");
+}
+
+function showProjectMenu(showAll = false) {
+  if (state.activeTimer.status !== "IDLE" || !state.projects.length) {
+    hideProjectMenu();
+    return;
+  }
+
+  const query = els.projectInput.value.trim().toLowerCase();
+  const projects = showAll || !query
+    ? state.projects
+    : state.projects.filter((project) => project.name.toLowerCase().includes(query));
+
+  els.projectMenu.replaceChildren(...projects.map((project) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "project-option";
+    button.textContent = project.name;
+    button.addEventListener("mousedown", (event) => event.preventDefault());
+    button.addEventListener("click", () => {
+      els.projectInput.value = project.name;
+      hideProjectMenu();
+      renderTimer();
+    });
+    return button;
+  }));
+
+  if (!projects.length) {
+    hideProjectMenu();
+    return;
+  }
+  els.projectMenu.hidden = false;
+  els.projectInput.setAttribute("aria-expanded", "true");
 }
 
 function currentProjectTotal() {
@@ -141,12 +173,9 @@ function renderTimer() {
 
   const locked = status !== "IDLE";
   els.projectInput.disabled = locked;
-  els.projectSelect.disabled = locked;
   if (locked && state.activeTimer.projectName) {
     els.projectInput.value = state.activeTimer.projectName;
-    els.projectSelect.value = state.activeTimer.projectId || "";
-  } else {
-    syncProjectSelectToInput();
+    hideProjectMenu();
   }
 
   els.startButton.disabled = status !== "IDLE";
@@ -156,18 +185,6 @@ function renderTimer() {
 }
 
 function renderProjectOptions() {
-  els.projectOptions.replaceChildren(...state.projects.map((project) => {
-    const option = document.createElement("option");
-    option.value = project.name;
-    return option;
-  }));
-
-  els.projectSelect.replaceChildren(
-    optionElement("", "新規プロジェクト名を入力"),
-    ...state.projects.map((project) => optionElement(project.id, project.name))
-  );
-  syncProjectSelectToInput();
-
   const previousFilter = els.historyProjectFilter.value || "all";
   els.historyProjectFilter.replaceChildren(
     optionElement("all", "すべてのプロジェクト"),
@@ -378,14 +395,18 @@ els.stopButton.addEventListener("click", async () => {
 });
 
 els.projectInput.addEventListener("input", () => {
-  syncProjectSelectToInput();
   renderTimer();
+  showProjectMenu(false);
 });
 
-els.projectSelect.addEventListener("change", () => {
-  const project = state.projects.find((item) => item.id === els.projectSelect.value);
-  els.projectInput.value = project?.name || "";
-  renderTimer();
+els.projectInput.addEventListener("focus", () => showProjectMenu(true));
+els.projectInput.addEventListener("click", () => showProjectMenu(true));
+els.projectInput.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") hideProjectMenu();
+});
+
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".project-combobox")) hideProjectMenu();
 });
 
 els.openHistoryButton.addEventListener("click", openHistoryWindow);

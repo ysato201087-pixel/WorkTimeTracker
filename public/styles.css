@@ -165,7 +165,6 @@ h2 {
 }
 
 .project-input,
-.project-select,
 select,
 input[type="datetime-local"],
 .edit-dialog input[type="text"] {
@@ -178,8 +177,39 @@ input[type="datetime-local"],
   padding: 8px 10px;
 }
 
-.project-select {
-  margin-top: 8px;
+.project-combobox {
+  position: relative;
+}
+
+.project-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  max-height: 168px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 26px rgba(32, 37, 41, 0.14);
+}
+
+.project-option {
+  display: block;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 0;
+  background: #ffffff;
+  color: var(--text);
+  text-align: left;
+}
+
+.project-option:hover,
+.project-option:focus {
+  background: #eef5ff;
 }
 
 .message {
