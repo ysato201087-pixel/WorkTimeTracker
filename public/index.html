@@ -4,7 +4,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>作業時間記録</title>
+    <meta name="apple-mobile-web-app-title" content="Work Time Tracker">
+    <meta name="application-name" content="Work Time Tracker">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="icon" href="/icon-512.png">
     <link rel="stylesheet" href="/styles.css">
+    <script src="/theme.js"></script>
   </head>
   <body>
     <main class="shell">
@@ -14,12 +20,18 @@
             <h1>作業時間記録</h1>
             <p id="statusText" class="status idle">未計測</p>
           </div>
-          <button id="openHistoryButton" class="icon-button" title="記録一覧を開く" aria-label="記録一覧を開く">≡</button>
+          <div class="top-actions">
+            <button id="themeButton" class="icon-button theme-button" title="表示モード切り替え" aria-label="表示モード切り替え"></button>
+            <button id="openHistoryButton" class="icon-button" title="記録一覧を開く" aria-label="記録一覧を開く">≡</button>
+          </div>
         </div>
 
-        <label class="field-label" for="projectInput">プロジェクト名</label>
+        <div class="project-combobox category-combobox">
+          <input id="categoryInput" class="project-input" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="categoryMenu" placeholder="カテゴリ (なしで未分類)" aria-label="カテゴリ">
+          <div id="categoryMenu" class="project-menu" hidden></div>
+        </div>
         <div class="project-combobox">
-          <input id="projectInput" class="project-input" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="projectMenu" placeholder="例: 商品広告A">
+          <input id="projectInput" class="project-input" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="projectMenu" placeholder="プロジェクト" aria-label="プロジェクト">
           <div id="projectMenu" class="project-menu" hidden></div>
         </div>
         <p id="message" class="message" role="status"></p>
@@ -30,7 +42,7 @@
         </div>
 
         <div class="total-row">
-          <span>プロジェクト累計</span>
+          <span id="projectTotalLabel">プロジェクト累計</span>
           <strong id="projectTotal">00:00:00</strong>
         </div>
 
@@ -52,12 +64,42 @@
       <div class="history-tools">
         <select id="historyProjectFilter"></select>
         <button id="addEntryButton">手動追加</button>
-        <button id="renameProjectButton">名称変更</button>
+        <button id="renameProjectButton">編集</button>
         <button id="deleteProjectButton" class="danger">削除</button>
+      </div>
+
+      <p id="historyMessage" class="message" role="status"></p>
+
+      <div class="segment" role="tablist">
+        <button id="viewEntriesButton" type="button" role="tab">履歴</button>
+        <button id="viewDailyButton" type="button" role="tab">日別</button>
       </div>
 
       <div id="historySummary" class="history-summary"></div>
       <div id="historyList" class="history-list"></div>
+    </dialog>
+
+    <dialog id="projectDialog" class="edit-dialog">
+      <form id="projectForm" method="dialog">
+        <div class="dialog-head">
+          <h2 id="projectDialogTitle">編集</h2>
+          <button id="cancelProjectButton" type="button" class="icon-button" aria-label="閉じる">×</button>
+        </div>
+        <label id="projectCategoryLabel">
+          カテゴリ
+          <input id="projectCategoryInput" type="text" list="categoryList" autocomplete="off" placeholder="なしで未分類">
+        </label>
+        <label>
+          名前
+          <input id="projectNameInput" type="text" autocomplete="off" required>
+        </label>
+        <datalist id="categoryList"></datalist>
+        <p id="projectMessage" class="message" role="status"></p>
+        <div class="edit-actions">
+          <span></span>
+          <button type="submit" class="primary">保存</button>
+        </div>
+      </form>
     </dialog>
 
     <dialog id="editDialog" class="edit-dialog">

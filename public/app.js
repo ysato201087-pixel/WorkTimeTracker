@@ -1,4 +1,5 @@
 const state = {
+  categories: [],
   projects: [],
   entries: [],
   activeTimer: { status: "IDLE", activeSeconds: 0 }
@@ -21,11 +22,14 @@ const $ = (id) => document.getElementById(id);
 
 const els = {
   statusText: $("statusText"),
+  categoryInput: $("categoryInput"),
+  categoryMenu: $("categoryMenu"),
   projectInput: $("projectInput"),
   projectMenu: $("projectMenu"),
   message: $("message"),
   currentTime: $("currentTime"),
   projectTotal: $("projectTotal"),
+  projectTotalLabel: $("projectTotalLabel"),
   startButton: $("startButton"),
   pauseButton: $("pauseButton"),
   resumeButton: $("resumeButton"),
@@ -38,6 +42,18 @@ const els = {
   renameProjectButton: $("renameProjectButton"),
   deleteProjectButton: $("deleteProjectButton"),
   historySummary: $("historySummary"),
+  historyMessage: $("historyMessage"),
+  projectDialog: $("projectDialog"),
+  projectDialogTitle: $("projectDialogTitle"),
+  projectForm: $("projectForm"),
+  projectCategoryLabel: $("projectCategoryLabel"),
+  projectCategoryInput: $("projectCategoryInput"),
+  projectNameInput: $("projectNameInput"),
+  projectMessage: $("projectMessage"),
+  cancelProjectButton: $("cancelProjectButton"),
+  categoryList: $("categoryList"),
+  viewEntriesButton: $("viewEntriesButton"),
+  viewDailyButton: $("viewDailyButton"),
   historyList: $("historyList"),
   editDialog: $("editDialog"),
   editDialogTitle: $("editDialogTitle"),
@@ -105,9 +121,38 @@ function setMessage(message = "", target = els.message) {
   target.textContent = message;
 }
 
+const UNCATEGORIZED = "未分類";
+const norm = (value) => String(value ?? "").normalize("NFKC").trim();
+const normCategory = (value) => (norm(value) === UNCATEGORIZED ? "" : norm(value));
+const sameText = (a, b) => norm(a).toLowerCase() === norm(b).toLowerCase();
+
+// 候補から選んだプロジェクトの id (文字を書き換えたら null に戻す)
+let pickedProjectId = null;
+
+function byRecent(a, b) {
+  return String(b.lastWorkedAt || "").localeCompare(String(a.lastWorkedAt || "")) || a.name.localeCompare(b.name, "ja");
+}
+
+// プロジェクト (name) と記録 (projectName) のどちらでも使う
+function projectLabel(item) {
+  const name = item.projectName ?? item.name;
+  return item.categoryName ? `${item.categoryName} / ${name}` : name;
+}
+
+function projectsInCategory(categoryName) {
+  const name = normCategory(categoryName);
+  return state.projects.filter((project) => (name ? sameText(project.categoryName, name) : !project.categoryName));
+}
+
 function selectedProject() {
-  const name = els.projectInput.value.trim();
-  return state.projects.find((project) => project.name.toLowerCase() === name.toLowerCase()) || null;
+  const picked = state.projects.find((project) => project.id === pickedProjectId);
+  if (picked) return picked;
+  const name = norm(els.projectInput.value);
+  if (!name) return null;
+  const categoryName = normCategory(els.categoryInput.value);
+  if (categoryName) return projectsInCategory(categoryName).find((project) => sameText(project.name, name)) || null;
+  const matches = state.projects.filter((project) => sameText(project.name, name));
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function hideProjectMenu() {
@@ -115,45 +160,117 @@ function hideProjectMenu() {
   els.projectInput.setAttribute("aria-expanded", "false");
 }
 
-function showProjectMenu(showAll = false) {
-  if (state.activeTimer.status !== "IDLE" || !state.projects.length) {
-    hideProjectMenu();
+function hideCategoryMenu() {
+  els.categoryMenu.hidden = true;
+  els.categoryInput.setAttribute("aria-expanded", "false");
+}
+
+function menuButton(label, sub, onPick) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "project-option";
+  button.textContent = label;
+  if (sub) {
+    const small = document.createElement("span");
+    small.className = "option-sub";
+    small.textContent = sub;
+    button.append(small);
+  }
+  button.addEventListener("mousedown", (event) => event.preventDefault());
+  button.addEventListener("click", onPick);
+  return button;
+}
+
+function showMenu(menu, input, buttons) {
+  if (!buttons.length) {
+    menu.hidden = true;
+    input.setAttribute("aria-expanded", "false");
     return;
   }
+  menu.replaceChildren(...buttons);
+  menu.hidden = false;
+  input.setAttribute("aria-expanded", "true");
+}
 
-  const query = els.projectInput.value.trim().toLowerCase();
-  const projects = showAll || !query
-    ? state.projects
-    : state.projects.filter((project) => project.name.toLowerCase().includes(query));
-
-  els.projectMenu.replaceChildren(...projects.map((project) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "project-option";
-    button.textContent = project.name;
-    button.addEventListener("mousedown", (event) => event.preventDefault());
-    button.addEventListener("click", () => {
+function showProjectMenu(showAll = false) {
+  hideCategoryMenu();
+  if (state.activeTimer.status !== "IDLE" || !state.projects.length) return hideProjectMenu();
+  const categoryName = normCategory(els.categoryInput.value);
+  const query = showAll ? "" : norm(els.projectInput.value).toLowerCase();
+  const pool = categoryName ? projectsInCategory(categoryName) : state.projects;
+  const projects = pool
+    .filter((project) => !query
+      || project.name.toLowerCase().includes(query)
+      || (!categoryName && project.categoryName.toLowerCase().includes(query)))
+    .sort(byRecent);
+  showMenu(els.projectMenu, els.projectInput, projects.map((project) => menuButton(
+    project.name,
+    categoryName ? "" : (project.categoryName || UNCATEGORIZED),
+    () => {
       els.projectInput.value = project.name;
+      els.categoryInput.value = project.categoryName;
+      pickedProjectId = project.id;
       hideProjectMenu();
       renderTimer();
-    });
-    return button;
-  }));
+    }
+  )));
+}
 
-  if (!projects.length) {
-    hideProjectMenu();
-    return;
+// カテゴリを変えた時: 選んだプロジェクトだけ見直す (手で打った名前は残す)
+function onCategoryChanged() {
+  const picked = state.projects.find((project) => project.id === pickedProjectId);
+  if (!picked) return renderTimer();
+  const categoryName = normCategory(els.categoryInput.value);
+  if (sameText(picked.categoryName, categoryName)) return renderTimer();
+  const twin = projectsInCategory(categoryName).find((project) => sameText(project.name, picked.name));
+  if (twin) {
+    pickedProjectId = twin.id;
+  } else {
+    pickedProjectId = null;
+    els.projectInput.value = "";
   }
-  els.projectMenu.hidden = false;
-  els.projectInput.setAttribute("aria-expanded", "true");
+  renderTimer();
+}
+
+function showCategoryMenu(showAll = false) {
+  hideProjectMenu();
+  if (state.activeTimer.status !== "IDLE" || !state.categories.length) return hideCategoryMenu();
+  const query = showAll ? "" : norm(els.categoryInput.value).toLowerCase();
+  const categories = state.categories.filter((category) => !query || category.name.toLowerCase().includes(query));
+  showMenu(els.categoryMenu, els.categoryInput, categories.map((category) => menuButton(
+    category.name,
+    "",
+    () => {
+      els.categoryInput.value = category.name;
+      hideCategoryMenu();
+      onCategoryChanged();
+      els.projectInput.focus();
+    }
+  )));
+}
+
+// 「その他」カテゴリは毎日リセット (今日の分だけ数える)
+const DAILY_RESET_CATEGORY = "その他";
+
+function isDailyReset(project) {
+  return Boolean(project) && sameText(project.categoryName, DAILY_RESET_CATEGORY);
+}
+
+function currentProject() {
+  const timer = state.activeTimer;
+  return timer.status !== "IDLE"
+    ? state.projects.find((item) => item.id === timer.projectId)
+    : selectedProject();
 }
 
 function currentProjectTotal() {
-  const timer = state.activeTimer;
-  const project = timer.status !== "IDLE"
-    ? state.projects.find((item) => item.id === timer.projectId)
-    : selectedProject();
-  return project?.totalSeconds || 0;
+  const project = currentProject();
+  if (!project) return 0;
+  if (!isDailyReset(project)) return project.totalSeconds || 0;
+  const today = localDayKey(new Date().toISOString());
+  return state.entries
+    .filter((entry) => entry.projectId === project.id && localDayKey(entry.startedAt) === today)
+    .reduce((sum, entry) => sum + entry.activeSeconds, 0);
 }
 
 function currentTimerSeconds() {
@@ -170,12 +287,19 @@ function renderTimer() {
   els.statusText.className = `status ${status.toLowerCase()}`;
   els.currentTime.textContent = formatClock(currentTimerSeconds());
   els.projectTotal.textContent = formatClock(currentProjectTotal());
+  const project = currentProject();
+  const dailyReset = project ? isDailyReset(project) : sameText(els.categoryInput.value, DAILY_RESET_CATEGORY);
+  els.projectTotalLabel.textContent = dailyReset ? "今日の累計" : "プロジェクト累計";
 
   const locked = status !== "IDLE";
   els.projectInput.disabled = locked;
+  els.categoryInput.disabled = locked;
   if (locked && state.activeTimer.projectName) {
     els.projectInput.value = state.activeTimer.projectName;
+    els.categoryInput.value = state.activeTimer.categoryName || "";
+    pickedProjectId = state.activeTimer.projectId;
     hideProjectMenu();
+    hideCategoryMenu();
   }
 
   els.startButton.disabled = status !== "IDLE";
@@ -184,19 +308,83 @@ function renderTimer() {
   els.stopButton.disabled = status === "IDLE";
 }
 
+// カテゴリごとのまとまり (未分類は最後)
+function categoryGroups() {
+  const groups = state.categories.map((category) => ({
+    key: `cat:${category.id}`,
+    name: category.name,
+    projects: state.projects.filter((project) => project.categoryId === category.id)
+  }));
+  const loose = state.projects.filter((project) => !project.categoryId);
+  if (loose.length) groups.push({ key: "cat:none", name: UNCATEGORIZED, projects: loose });
+  return groups;
+}
+
 function renderProjectOptions() {
   const previousFilter = els.historyProjectFilter.value || "all";
+  const groups = categoryGroups();
   els.historyProjectFilter.replaceChildren(
-    optionElement("all", "すべてのプロジェクト"),
-    ...state.projects.map((project) => optionElement(project.id, project.name))
+    optionElement("all", "すべて"),
+    ...groups.map((group) => {
+      const optgroup = document.createElement("optgroup");
+      optgroup.label = group.name;
+      optgroup.append(
+        optionElement(group.key, `${group.name} 全体`),
+        ...group.projects.map((project) => optionElement(`proj:${project.id}`, project.name))
+      );
+      return optgroup;
+    })
   );
   if ([...els.historyProjectFilter.options].some((option) => option.value === previousFilter)) {
     els.historyProjectFilter.value = previousFilter;
   }
 
-  els.editProjectId.replaceChildren(
-    ...state.projects.map((project) => optionElement(project.id, project.name))
-  );
+  const previousEditProject = els.editProjectId.value;
+  els.editProjectId.replaceChildren(...groups.filter((group) => group.projects.length).map((group) => {
+    const optgroup = document.createElement("optgroup");
+    optgroup.label = group.name;
+    optgroup.append(...group.projects.map((project) => optionElement(project.id, project.name)));
+    return optgroup;
+  }));
+  if (previousEditProject && state.projects.some((project) => project.id === previousEditProject)) {
+    els.editProjectId.value = previousEditProject;
+  }
+
+  els.categoryList.replaceChildren(...state.categories.map((category) => optionElement(category.name, category.name)));
+}
+
+// 絞り込み: all / cat:<id> / cat:none / proj:<id>
+function currentFilter() {
+  const value = els.historyProjectFilter.value || "all";
+  if (value.startsWith("proj:")) return { type: "project", id: value.slice(5) };
+  if (value === "cat:none") return { type: "category", id: null };
+  if (value.startsWith("cat:")) return { type: "category", id: value.slice(4) };
+  return { type: "all" };
+}
+
+function matchesFilter(projectId, categoryId) {
+  const filter = currentFilter();
+  if (filter.type === "project") return projectId === filter.id;
+  if (filter.type === "category") return (categoryId || null) === filter.id;
+  return true;
+}
+
+function filterTitle() {
+  const filter = currentFilter();
+  if (filter.type === "project") {
+    const project = state.projects.find((item) => item.id === filter.id);
+    return project ? projectLabel(project) : "";
+  }
+  if (filter.type === "category") {
+    return filter.id ? (state.categories.find((item) => item.id === filter.id)?.name || "") : UNCATEGORIZED;
+  }
+  return "すべて";
+}
+
+function filterTotalSeconds() {
+  return state.projects
+    .filter((project) => matchesFilter(project.id, project.categoryId))
+    .reduce((sum, project) => sum + project.totalSeconds, 0);
 }
 
 function optionElement(value, label) {
@@ -207,22 +395,112 @@ function optionElement(value, label) {
 }
 
 function entriesForFilter() {
-  const filter = els.historyProjectFilter.value;
   return state.entries
-    .filter((entry) => filter === "all" || entry.projectId === filter)
+    .filter((entry) => matchesFilter(entry.projectId, entry.categoryId))
     .sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt));
 }
 
-function renderHistory() {
-  const filter = els.historyProjectFilter.value;
-  const entries = entriesForFilter();
-  const selected = state.projects.find((project) => project.id === filter);
-  const totalSeconds = selected
-    ? selected.totalSeconds
-    : state.projects.reduce((sum, project) => sum + project.totalSeconds, 0);
-  const title = selected ? selected.name : "全プロジェクト";
+const VIEW_KEY = "wtt-history-view";
+let historyView = "entries";
+try { historyView = localStorage.getItem(VIEW_KEY) === "daily" ? "daily" : "entries"; } catch {}
 
-  els.historySummary.textContent = `${title} 合計 ${formatClock(totalSeconds)} / 表示履歴 ${entries.length}件`;
+function setHistoryView(view) {
+  historyView = view;
+  try { localStorage.setItem(VIEW_KEY, view); } catch {}
+  renderHistory();
+}
+
+function localDayKey(iso) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function formatDayLabel(key) {
+  const [y, m, d] = key.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const week = "日月火水木金土"[date.getDay()];
+  const today = localDayKey(new Date().toISOString());
+  const label = `${m}/${d} (${week})`;
+  return key === today ? `今日 ${label}` : label;
+}
+
+// 日別: 開始日 (ローカル) → カテゴリ → プロジェクト。計測中のタイマーは今日に加算
+function dailyTotals() {
+  const days = new Map();
+  const add = (dayKey, item, seconds) => {
+    if (!matchesFilter(item.projectId, item.categoryId)) return;
+    if (!days.has(dayKey)) days.set(dayKey, { total: 0, categories: new Map() });
+    const day = days.get(dayKey);
+    day.total += seconds;
+    const catKey = item.categoryId || "none";
+    if (!day.categories.has(catKey)) {
+      day.categories.set(catKey, { name: item.categoryName || UNCATEGORIZED, seconds: 0, projects: new Map() });
+    }
+    const category = day.categories.get(catKey);
+    category.seconds += seconds;
+    const project = category.projects.get(item.projectId) || { name: item.projectName, seconds: 0 };
+    project.seconds += seconds;
+    category.projects.set(item.projectId, project);
+  };
+  for (const entry of state.entries) add(localDayKey(entry.startedAt), entry, entry.activeSeconds);
+  const timer = state.activeTimer;
+  if (timer.status !== "IDLE" && timer.projectId) {
+    add(localDayKey(new Date().toISOString()), timer, currentTimerSeconds());
+  }
+  return [...days.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
+}
+
+function dayRow(className, name, seconds) {
+  const row = document.createElement("div");
+  row.className = className;
+  row.innerHTML = `<span class="project-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span><span>${formatDuration(seconds)}</span>`;
+  return row;
+}
+
+function renderDaily() {
+  const days = dailyTotals();
+  const periodTotal = days.reduce((sum, [, day]) => sum + day.total, 0);
+  const range = days.length ? `${formatDayLabel(days[days.length - 1][0]).replace(/^今日 /, "")} 〜 ` : "";
+  els.historySummary.textContent = `${filterTitle()} ${range}合計 ${formatDuration(periodTotal)}`;
+  els.historyList.replaceChildren();
+
+  if (!days.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "記録はまだありません。";
+    els.historyList.append(empty);
+    return;
+  }
+
+  for (const [key, day] of days) {
+    const block = document.createElement("div");
+    block.className = "day-block";
+    const head = document.createElement("div");
+    head.className = "day-head";
+    head.innerHTML = `<span>${formatDayLabel(key)}</span><strong>${formatDuration(day.total)}</strong>`;
+    block.append(head);
+    const categories = [...day.categories.values()].sort((a, b) => b.seconds - a.seconds);
+    for (const category of categories) {
+      block.append(dayRow("day-category", category.name, category.seconds));
+      const projects = [...category.projects.values()].sort((a, b) => b.seconds - a.seconds);
+      for (const project of projects) block.append(dayRow("day-project", project.name, project.seconds));
+    }
+    els.historyList.append(block);
+  }
+}
+
+function renderHistory() {
+  els.viewEntriesButton.classList.toggle("active", historyView === "entries");
+  els.viewDailyButton.classList.toggle("active", historyView === "daily");
+  els.viewEntriesButton.setAttribute("aria-selected", String(historyView === "entries"));
+  els.viewDailyButton.setAttribute("aria-selected", String(historyView === "daily"));
+  const filter = currentFilter();
+  const editable = filter.type === "project" || (filter.type === "category" && filter.id);
+  els.renameProjectButton.disabled = !editable;
+  els.deleteProjectButton.disabled = !editable;
+  if (historyView === "daily") return renderDaily();
+  const entries = entriesForFilter();
+  els.historySummary.textContent = `${filterTitle()} 累計 ${formatClock(filterTotalSeconds())} / 表示履歴 ${entries.length}件`;
   els.historyList.replaceChildren();
 
   if (!entries.length) {
@@ -239,7 +517,7 @@ function renderHistory() {
     row.innerHTML = `
       <span>${formatDate(entry.startedAt)}</span>
       <strong>${formatDuration(entry.activeSeconds)}</strong>
-      <span class="project-name" title="${escapeHtml(entry.projectName)}">${escapeHtml(entry.projectName)}</span>
+      <span class="project-name" title="${escapeHtml(projectLabel(entry))}">${escapeHtml(projectLabel(entry))}</span>
     `;
     const edit = document.createElement("button");
     edit.type = "button";
@@ -261,6 +539,7 @@ function escapeHtml(text) {
 }
 
 function applyState(nextState) {
+  state.categories = nextState.categories || [];
   state.projects = nextState.projects;
   state.entries = nextState.entries;
   state.activeTimer = nextState.activeTimer;
@@ -277,7 +556,15 @@ async function loadState() {
   }
 }
 
+const isStandalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+
 function openHistoryWindow() {
+  // Safari の Web アプリでは別ウィンドウが Safari 本体で開くことがあるので、画面内ダイアログにする
+  if (isStandalone) {
+    renderHistory();
+    els.historyDialog.showModal();
+    return;
+  }
   const historyUrl = `${location.origin}${location.pathname}?history=1`;
   const popup = window.open(
     historyUrl,
@@ -338,12 +625,14 @@ function openEdit(entryId) {
 
 function openAdd() {
   if (!state.projects.length) {
-    setMessage("先にプロジェクトを作成してください。");
+    setMessage("先にプロジェクトを作成してください。", els.historyMessage);
     return;
   }
 
-  const filteredProject = state.projects.find((project) => project.id === els.historyProjectFilter.value);
-  const target = filteredProject || selectedProject() || state.projects[0];
+  const filter = currentFilter();
+  const inFilter = state.projects.filter((project) => matchesFilter(project.id, project.categoryId)).sort(byRecent);
+  const recent = [...state.projects].sort(byRecent)[0];
+  const target = (filter.type !== "all" && inFilter[0]) || selectedProject() || recent;
   els.editDialogTitle.textContent = "作業時間を追加";
   els.editEntryId.value = "";
   els.editProjectId.value = target.id;
@@ -360,7 +649,9 @@ els.startButton.addEventListener("click", async () => {
   try {
     applyState(await api("/api/timer/start", {
       method: "POST",
-      body: JSON.stringify({ projectName: els.projectInput.value })
+      body: JSON.stringify(selectedProject() && pickedProjectId
+        ? { projectId: pickedProjectId }
+        : { categoryName: els.categoryInput.value, projectName: els.projectInput.value })
     }));
   } catch (error) {
     setMessage(error.message);
@@ -395,8 +686,22 @@ els.stopButton.addEventListener("click", async () => {
 });
 
 els.projectInput.addEventListener("input", () => {
+  pickedProjectId = null;
   renderTimer();
   showProjectMenu(false);
+});
+
+els.categoryInput.addEventListener("input", () => showCategoryMenu(false));
+els.categoryInput.addEventListener("change", onCategoryChanged);
+els.categoryInput.addEventListener("focus", () => showCategoryMenu(true));
+els.categoryInput.addEventListener("click", () => showCategoryMenu(true));
+els.categoryInput.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") hideCategoryMenu();
+  if (event.key === "Enter") {
+    hideCategoryMenu();
+    onCategoryChanged();
+    els.projectInput.focus();
+  }
 });
 
 els.projectInput.addEventListener("focus", () => showProjectMenu(true));
@@ -406,7 +711,10 @@ els.projectInput.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("click", (event) => {
-  if (!event.target.closest(".project-combobox")) hideProjectMenu();
+  if (!event.target.closest(".project-combobox")) {
+    hideProjectMenu();
+    hideCategoryMenu();
+  }
 });
 
 els.openHistoryButton.addEventListener("click", openHistoryWindow);
@@ -430,33 +738,80 @@ els.durationPreset.addEventListener("change", () => {
   els.editActiveText.disabled = true;
 });
 
-els.renameProjectButton.addEventListener("click", async () => {
-  const projectId = els.historyProjectFilter.value;
-  if (projectId === "all") return setMessage("名称変更するプロジェクトを選択してください。");
-  const project = state.projects.find((item) => item.id === projectId);
-  const name = prompt("新しいプロジェクト名", project?.name || "");
-  if (name === null) return;
+let projectDialogTarget = null;
+
+els.renameProjectButton.addEventListener("click", () => {
+  setMessage("", els.historyMessage);
+  const filter = currentFilter();
+  if (filter.type === "project") {
+    const project = state.projects.find((item) => item.id === filter.id);
+    if (!project) return;
+    projectDialogTarget = { type: "project", id: project.id };
+    els.projectDialogTitle.textContent = "プロジェクトを編集";
+    els.projectCategoryLabel.hidden = false;
+    els.projectCategoryInput.value = project.categoryName;
+    els.projectNameInput.value = project.name;
+  } else if (filter.type === "category" && filter.id) {
+    const category = state.categories.find((item) => item.id === filter.id);
+    if (!category) return;
+    projectDialogTarget = { type: "category", id: category.id };
+    els.projectDialogTitle.textContent = "カテゴリを編集";
+    els.projectCategoryLabel.hidden = true;
+    els.projectNameInput.value = category.name;
+  } else {
+    return;
+  }
+  setMessage("", els.projectMessage);
+  els.projectDialog.showModal();
+  els.projectNameInput.select();
+});
+
+els.cancelProjectButton.addEventListener("click", () => els.projectDialog.close());
+
+els.projectForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const target = projectDialogTarget;
+  if (!target) return;
   try {
-    applyState(await api(`/api/projects/${projectId}`, {
-      method: "PUT",
-      body: JSON.stringify({ name })
-    }));
-    els.historyProjectFilter.value = projectId;
+    if (target.type === "project") {
+      applyState(await api(`/api/projects/${target.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ name: els.projectNameInput.value, categoryName: els.projectCategoryInput.value })
+      }));
+      els.historyProjectFilter.value = `proj:${target.id}`;
+    } else {
+      applyState(await api(`/api/categories/${target.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ name: els.projectNameInput.value })
+      }));
+      els.historyProjectFilter.value = `cat:${target.id}`;
+    }
+    renderHistory();
+    els.projectDialog.close();
   } catch (error) {
-    setMessage(error.message);
+    setMessage(error.message, els.projectMessage);
   }
 });
 
 els.deleteProjectButton.addEventListener("click", async () => {
-  const projectId = els.historyProjectFilter.value;
-  if (projectId === "all") return setMessage("削除するプロジェクトを選択してください。");
-  const project = state.projects.find((item) => item.id === projectId);
-  if (!confirm(`「${project?.name || ""}」を削除します。紐づく作業履歴も削除されます。`)) return;
+  setMessage("", els.historyMessage);
+  const filter = currentFilter();
   try {
-    applyState(await api(`/api/projects/${projectId}`, { method: "DELETE" }));
+    if (filter.type === "project") {
+      const project = state.projects.find((item) => item.id === filter.id);
+      if (!confirm(`「${project ? projectLabel(project) : ""}」を削除します。作業履歴は一覧から消え、バックアップの CSV に移されます。`)) return;
+      applyState(await api(`/api/projects/${filter.id}`, { method: "DELETE" }));
+    } else if (filter.type === "category" && filter.id) {
+      const category = state.categories.find((item) => item.id === filter.id);
+      if (!confirm(`カテゴリ「${category?.name || ""}」を削除します。中のプロジェクトと記録は未分類に移ります。`)) return;
+      applyState(await api(`/api/categories/${filter.id}`, { method: "DELETE" }));
+    } else {
+      return;
+    }
     els.historyProjectFilter.value = "all";
+    renderHistory();
   } catch (error) {
-    setMessage(error.message);
+    setMessage(error.message, els.historyMessage);
   }
 });
 
@@ -504,14 +859,17 @@ els.deleteEntryButton.addEventListener("click", async () => {
   }
 });
 
-window.addEventListener("beforeunload", (event) => {
-  if (state.activeTimer.status === "IDLE") return;
-  event.preventDefault();
-  event.returnValue = "現在タイマーが動作しています。";
-});
+els.viewEntriesButton.addEventListener("click", () => setHistoryView("entries"));
+els.viewDailyButton.addEventListener("click", () => setHistoryView("daily"));
+
+let lastDailyRender = 0;
 
 function scheduleTimerRender() {
   renderTimer();
+  if (historyView === "daily" && state.activeTimer.status === "RUNNING" && els.historyDialog.open && Date.now() - lastDailyRender > 60000) {
+    lastDailyRender = Date.now();
+    renderHistory();
+  }
   const timer = state.activeTimer;
   let wait = 500;
   if (timer.status === "RUNNING" && timer.startedAt) {
@@ -530,4 +888,4 @@ loadState().then(() => {
     els.historyDialog.showModal();
   }
 });
-if (!isHistoryPage) scheduleTimerRender();
+scheduleTimerRender();
